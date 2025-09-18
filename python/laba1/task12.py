@@ -1,0 +1,10 @@
+rate = 24.99
+rate_price_minuts = 0.89
+rate_price_masseage = 0.59
+rate_price_internet = 0.79
+rate_minuts = 60
+rate_massage = 30
+rate_internet = 1
+minuts = int(input("Write your minuts: "))
+massages = int(input("Write your massages: "))
+internet = int(input("Write your internet: "))
