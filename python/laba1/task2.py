@@ -1,0 +1,7 @@
+str_1 = input("Write your string: ")
+str_1 = str_1.replace("a", "")
+str_1 = str_1.replace("e", "")
+str_1 = str_1.replace("i", "")
+str_1 = str_1.replace("o", "")
+str_1 = str_1.replace("u", "")
+print(str_1)
