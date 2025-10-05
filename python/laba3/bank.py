@@ -1,3 +1,19 @@
+class BankError(Exception):
+    pass
+
+class ClientNotFound(BankError):
+    def __init__(self, client_id):
+        super().__init__(f"Client with ID {client_id} not found")
+
+class AccountExistsError(BankError):
+    def __init__(self, currency):
+        super().__init__(f"The client already has an account in the {currency} currency")
+
+class InsufficientFundsError(BankError):
+    def __init__(self, balance, amount):
+        super().__init__(f"Insufficient funds: balance {balance}, attempt to withdraw {amount}")
+
+
 class Entity:
     def __init__(self,entity_id: int):
         self.id:int = entity_id
@@ -9,9 +25,9 @@ class Client(Entity):
         self.name:str = name
         self.accounts: dict[str, Account] = {}
 
-        def __str__(self):
-            account_info = "\n".join(str(acc) for acc in self.accounts.values())
-            return f"Client ID: {self.id} | Name: {self.name}\nAccounts:\n{account_info if account_info else 'No accounts'}"
+    def __str__(self):
+        account_info = "\n".join(str(acc) for acc in self.accounts.values())
+        return f"Client ID: {self.id} | Name: {self.name}\nAccounts:\n{account_info if account_info else 'No accounts'}"
 
 class Account(Entity):
     def __init__(self, acc_id:int, owner_id:int, currency:str, balance: float = 0.0):
@@ -20,8 +36,8 @@ class Account(Entity):
         self.currency:str = currency
         self.balance:float = balance
 
-        def __str__(self):
-            return f"Account {self.id} | {self.currency} | Balance: {self.balance}"
+    def __str__(self):
+        return f"Account {self.id} | {self.currency} | Balance: {self.balance}"
 
 
 class Bank:
@@ -30,3 +46,4 @@ class Bank:
         self.accounts:dict[int, Account] = {}
         self.next_client_id:int = 1
         self.next_account_id:int = 1
+
