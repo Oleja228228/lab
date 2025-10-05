@@ -1,4 +1,5 @@
-from idlelib.squeezer import count_lines_with_wrapping
+import json
+import os
 
 
 class BankError(Exception):
@@ -111,9 +112,37 @@ class Bank:
         to_account.balance += amount
         print(f"Transferred {amount} {from_currency} from {from_client.name} to {to_client.name} ({to_currency})")
 
+    def save_data(self, filename = "clients.json"):
+        data = {}
+        for client_id, client in self.clients.items():
+            account_data = {currency: account.balance for currency, account in client.accounts.items()}
+            data[client_id] = {
+                "name" : client.name,
+                "accounts" : account_data,
+            }
+        with open(filename, "w") as f:
+            json.dump(data, f)
+
+    def load_data(self, filename="clients.json"):
+        if not os.path.exists(filename):
+            return
+        with open(filename, "r") as f:
+            data = json.load(f)
+        for client_id_str, client_data in data.items():
+            client_id = int(client_id_str)
+            client = Client(client_id, client_data["name"])
+            self.clients[client_id] = client
+            self.next_client_id = max(self.next_client_id, client_id+1)
+            for currency, balance in client_data["accounts"].items():
+                account = Account(self.next_account_id, client_id, currency, balance)
+                self.accounts[self.next_account_id] = account
+                client.accounts[currency] = account
+                self.next_account_id += 1
+
+
 
 bank = Bank()
-
+bank.load_data()
 while True:
     print("1. Creating a new account")
     print("2. Open an account")
@@ -132,6 +161,7 @@ while True:
             bank.clients[new_client_id] = Client(new_client_id, name)
             bank.next_client_id += 1
             print(f"Client {name} create with ID {new_client_id}")
+            bank.save_data()
         else:
             client_id = int(input("Enter client ID: "))
 
@@ -139,17 +169,20 @@ while True:
             currency = input("Enter your currency: ")
             initial = float(input("Start balance: "))
             bank.open_account(client_id, currency, initial)
+            bank.save_data()
 
         elif choice == "3":
             currency = input("Enter your currency: ")
             amount = float(input("Enter your amount: "))
             bank.deposit(client_id, currency, amount)
+            bank.save_data()
 
         elif choice == "4":
             currency = input("Enter your currency: ")
             amount = float(input("Enter your amount: "))
             account = bank.clients[client_id].accounts[currency]
             account.withdraw(amount)
+            bank.save_data()
 
         elif choice == "5":
             to_id = int(input("Recipient's ID: "))
@@ -157,6 +190,7 @@ while True:
             to_currency = input("Recipient's currency: ")
             amount = float(input("Enter amount: "))
             bank.transfer(client_id, from_currency, to_id, to_currency, amount)
+            bank.save_data()
 
         elif choice == "6":
             client = bank.clients[client_id]
