@@ -60,9 +60,8 @@ if __name__ == "__main__":
     x1_aux = gauss_elimination(A1, b1_aux)
     rel_err1 = relative_error(x1, x1_aux)
 
-    print("=== Задача 1 ===")
     print("x =", fmt_vec(x1))
     print("невязка =", fmt_vec(r1))
-    print("||r||∞ =", f"{norm_r1:.3e}")
+    print("r =", f"{norm_r1:.3e}")
     print("x_aux =", fmt_vec(x1_aux))
     print("δ =", f"{rel_err1:.3e}")
