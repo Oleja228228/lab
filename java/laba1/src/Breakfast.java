@@ -7,10 +7,9 @@ public class Breakfast {
         boolean calcCalories = false;
         boolean sort = false;
 
-        // Если нет аргументов, читаем с консоли
         if (args.length == 0) {
             Scanner scanner = new Scanner(System.in);
-            System.out.println("Введите продукты (например: Apple/большое, Cheese, Tea/чёрный, для сортировки -sort, для колорийности -calories).");
+            System.out.println("Введите продукты (например: IceCream/карамель, IceCream/шоколад,  -sort -calories).");
             System.out.println("Введите 'end' для завершения ввода.");
 
             while (itemsCount < breakfast.length) {
@@ -62,15 +61,12 @@ public class Breakfast {
 
     private static Food parseFood(String[] parts) {
         switch (parts[0].toLowerCase()) {
-            case "apple":
-                return new Apple(parts.length > 1 ? parts[1] : "среднее");
-            case "cheese":
-                return new Cheese();
-            case "tea":
-                return new Tea(parts.length > 1 ? parts[1] : "чёрный");
+            case "icecream":
+                return new IceCream(parts.length > 1 ? parts[1] : "карамель");
             default:
                 System.out.println("Неизвестный продукт: " + parts[0]);
                 return null;
         }
     }
+
 }
