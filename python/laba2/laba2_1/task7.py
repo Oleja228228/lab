@@ -1,5 +1,3 @@
-from statistics import stdev
-
 input_str = input("Write your string: ")
 
 count = 1
