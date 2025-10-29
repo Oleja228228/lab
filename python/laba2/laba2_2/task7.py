@@ -10,7 +10,6 @@ def merge_sorted_list(list1, list2):
             merged.append(list2[j])
             j += 1
 
-    # добавляем остатки
     while i < len(list1):
         merged.append(list1[i])
         i += 1
