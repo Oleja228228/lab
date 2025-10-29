@@ -15,7 +15,12 @@ def transpose_matrix(matrix):
 n = int(input("Enter number of rows: "))
 m = int(input("Enter number of columns: "))
 
-matrix = [[random.randint(1, 9) for _ in range(m)] for _ in range(n)]
+matrix = []
+
+for i in range(n):
+    matrix.append([])
+    for j in range(m):
+        matrix[i].append(int(input(f"Enter num in {i} row and {j} column: ")))
 
 print("Original matrix:")
 for row in matrix:
