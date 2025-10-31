@@ -1,98 +1,114 @@
+# lab2_task1_newton_final.py
 import numpy as np
 
 class NewtonSystemSolver:
-
-    def __init__(self, F, J_analytic=None, eps_f=1e-9, eps_x=1e-9, max_iter=100, jacobian_M=0.01):
+    def __init__(self, F, J_analytic=None, eps_f=1e-9, eps_x=1e-9,
+                 max_iter=200, jacobian_M=0.01,
+                 min_alpha=1e-4, alpha_factor=0.5):
         self.F = F
         self.J_analytic = J_analytic
         self.eps_f = eps_f
         self.eps_x = eps_x
         self.max_iter = max_iter
         self.jacobian_M = jacobian_M
+        self.min_alpha = min_alpha
+        self.alpha_factor = alpha_factor
 
     def numeric_jacobian(self, x):
-        """Численная матрица Якоби методом конечных разностей (центральные разности)."""
         n = x.size
-        J = np.zeros((n, n), dtype=float)
-        fx = self.F(x)
+        J = np.zeros((n, n))
         for j in range(n):
-            # относительное приращение
             h = self.jacobian_M * max(1.0, abs(x[j]))
-            x_plus = x.copy(); x_minus = x.copy()
+            x_plus, x_minus = x.copy(), x.copy()
             x_plus[j] += h
             x_minus[j] -= h
-            f_plus = self.F(x_plus)
-            f_minus = self.F(x_minus)
-            # центральная разность
+            f_plus, f_minus = self.F(x_plus), self.F(x_minus)
+            if np.any(np.isnan(f_plus)) or np.any(np.isnan(f_minus)):
+                return np.full((n, n), np.nan)
             J[:, j] = (f_plus - f_minus) / (2.0 * h)
         return J
 
-    def solve(self, x0, verbose=False):
-        """
-        Выполнить итерации Ньютона от начального приближения x0.
-        Возвращает (x, info) где info — словарь с метриками.
-        """
+    def solve(self, x0, verbose=True):
         x = np.array(x0, dtype=float)
-        n = x.size
         history = []
 
         for k in range(1, self.max_iter + 1):
             Fx = self.F(x)
-            delta_f = np.max(np.abs(Fx))  # критерий 1: макс невязка
-            # выбрать Якоби
-            if self.J_analytic is not None:
-                J = self.J_analytic(x)
-            else:
-                J = self.numeric_jacobian(x)
+            if np.any(np.isnan(Fx)) or np.any(np.isinf(Fx)):
+                print(" Недопустимое значение F (log отриц.) на итерации", k)
+                return None, {"status": "invalid_F", "iter": k, "x": x, "history": history}
 
-            # решить J * dx = -F
+            delta_f = np.max(np.abs(Fx))  # δ1
+
+            J = self.J_analytic(x) if self.J_analytic is not None else self.numeric_jacobian(x)
+            if np.any(np.isnan(J)) or np.any(np.isinf(J)):
+                return None, {"status": "invalid_J", "iter": k, "x": x, "history": history}
+
             try:
                 dx = np.linalg.solve(J, -Fx)
             except np.linalg.LinAlgError:
-                return None, {"status": "singular_jacobian", "iter": k, "x": x, "Fx": Fx}
+                return None, {"status": "singular_J", "iter": k, "x": x, "history": history}
 
-            # критерий на изменение x: воспользуемся относительным правилом
-            # δ2 = max_i |Δx_i| / max(1, |x_i|)
-            rel_change = np.max(np.abs(dx) / np.maximum(1.0, np.abs(x)))
+            rel_change = np.max(np.abs(dx) / np.maximum(1.0, np.abs(x)))  # δ2
 
-            # обновление
-            x = x + dx
+            # backtracking — уменьшаем шаг, если log(x2+1.5) становится недопустим
+            alpha = 1.0
+            while alpha >= self.min_alpha:
+                x_try = x + alpha * dx
+                Fx_try = self.F(x_try)
+                if not (np.any(np.isnan(Fx_try)) or np.any(np.isinf(Fx_try))):
+                    break
+                alpha *= self.alpha_factor
 
-            history.append({"iter": k, "x": x.copy(), "norm_F": delta_f, "rel_change": rel_change})
+            if alpha < self.min_alpha:
+                print(" Не удалось подобрать шаг на итерации", k)
+                return None, {"status": "line_search_failed", "iter": k, "x": x, "history": history}
+
+            x = x + alpha * dx
+            history.append({"iter": k, "x": x.copy(), "δ1": delta_f, "δ2": rel_change})
 
             if verbose:
-                print(f"iter={k:3d}  ||F||_max={delta_f:.3e}  rel_change={rel_change:.3e}")
+                print(f"{k:3d}: δ1={delta_f:.3e}  δ2={rel_change:.3e}  α={alpha:.2f}  x={x}")
 
-            # критерии остановки (см. условие в методичке: одновременно по F и по Δx)
+            # условие остановки
             if delta_f <= self.eps_f and rel_change <= self.eps_x:
                 return x, {"status": "converged", "iter": k, "x": x, "history": history}
 
-        # если не сошлось за max_iter
         return x, {"status": "no_convergence", "iter": self.max_iter, "x": x, "history": history}
 
-# -------------------------
-# Пример использования:
-# -------------------------
+
+# --- Лабораторная №2, Задача №1 ---
+
+def F_task1(v):
+    x1, x2 = v
+    if x2 + 1.5 <= 0:  # защита от log отрицательного
+        return np.array([np.nan, np.nan])
+    return np.array([
+        np.log(x2 + 1.5) + x1 - 0.5,
+        x2 - 6 * np.cos(x1 + 3)
+    ])
+
+def J_task1(v):
+    x1, x2 = v
+    return np.array([
+        [1.0, 1.0 / (x2 + 1.5)],
+        [6 * np.sin(x1 + 3), 1.0]
+    ])
+
+
 if __name__ == "__main__":
-    def F_example(v):
-        x, y = v
-        return np.array([x**2 + y**2 - 4.0,
-                         np.exp(x) + y - 1.0])
+    x0 = np.array([1.0, 1.0])  # начальное приближение из таблицы 2.1
 
-    # Аналитическая Якоби для примера:
-    def J_example(v):
-        x, y = v
-        return np.array([[2*x,      2*y],
-                         [np.exp(x), 1.0]])
+    solver = NewtonSystemSolver(F_task1, J_analytic=J_task1,
+                                eps_f=1e-9, eps_x=1e-9,
+                                max_iter=200, jacobian_M=0.01)
 
-    x0 = np.array([1.0, 1.0])  # начальное приближение
+    sol, info = solver.solve(x0, verbose=True)
 
-    # Вариант A: аналитическая Якоби
-    solverA = NewtonSystemSolver(F_example, J_analytic=J_example, eps_f=1e-9, eps_x=1e-9, max_iter=50)
-    solA, infoA = solverA.solve(x0, verbose=True)
-    print("Analytic J result:", infoA["status"], "iter:", infoA.get("iter"), "x:", infoA.get("x"))
-
-    # Вариант B: численный Якоби (с M = 0.01)
-    solverB = NewtonSystemSolver(F_example, J_analytic=None, jacobian_M=0.01, eps_f=1e-9, eps_x=1e-9, max_iter=50)
-    solB, infoB = solverB.solve(x0, verbose=True)
-    print("Numeric J result:", infoB["status"], "iter:", infoB.get("iter"), "x:", infoB.get("x"))
+    if info["status"] == "converged":
+        print("\n Метод сошёлся")
+        print("Итераций:", info["iter"])
+        print("x* =", info["x"])
+        print("F(x*) =", F_task1(info["x"]))
+    else:
+        print("\n️ Метод не сошёлся:", info["status"])
