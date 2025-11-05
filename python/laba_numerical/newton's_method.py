@@ -1,114 +1,136 @@
-# lab2_task1_newton_final.py
+import math
 import numpy as np
 
-class NewtonSystemSolver:
-    def __init__(self, F, J_analytic=None, eps_f=1e-9, eps_x=1e-9,
-                 max_iter=200, jacobian_M=0.01,
-                 min_alpha=1e-4, alpha_factor=0.5):
-        self.F = F
-        self.J_analytic = J_analytic
-        self.eps_f = eps_f
-        self.eps_x = eps_x
-        self.max_iter = max_iter
-        self.jacobian_M = jacobian_M
-        self.min_alpha = min_alpha
-        self.alpha_factor = alpha_factor
-
-    def numeric_jacobian(self, x):
-        n = x.size
-        J = np.zeros((n, n))
-        for j in range(n):
-            h = self.jacobian_M * max(1.0, abs(x[j]))
-            x_plus, x_minus = x.copy(), x.copy()
-            x_plus[j] += h
-            x_minus[j] -= h
-            f_plus, f_minus = self.F(x_plus), self.F(x_minus)
-            if np.any(np.isnan(f_plus)) or np.any(np.isnan(f_minus)):
-                return np.full((n, n), np.nan)
-            J[:, j] = (f_plus - f_minus) / (2.0 * h)
-        return J
-
-    def solve(self, x0, verbose=True):
-        x = np.array(x0, dtype=float)
-        history = []
-
-        for k in range(1, self.max_iter + 1):
-            Fx = self.F(x)
-            if np.any(np.isnan(Fx)) or np.any(np.isinf(Fx)):
-                print(" Недопустимое значение F (log отриц.) на итерации", k)
-                return None, {"status": "invalid_F", "iter": k, "x": x, "history": history}
-
-            delta_f = np.max(np.abs(Fx))  # δ1
-
-            J = self.J_analytic(x) if self.J_analytic is not None else self.numeric_jacobian(x)
-            if np.any(np.isnan(J)) or np.any(np.isinf(J)):
-                return None, {"status": "invalid_J", "iter": k, "x": x, "history": history}
-
-            try:
-                dx = np.linalg.solve(J, -Fx)
-            except np.linalg.LinAlgError:
-                return None, {"status": "singular_J", "iter": k, "x": x, "history": history}
-
-            rel_change = np.max(np.abs(dx) / np.maximum(1.0, np.abs(x)))  # δ2
-
-            # backtracking — уменьшаем шаг, если log(x2+1.5) становится недопустим
-            alpha = 1.0
-            while alpha >= self.min_alpha:
-                x_try = x + alpha * dx
-                Fx_try = self.F(x_try)
-                if not (np.any(np.isnan(Fx_try)) or np.any(np.isinf(Fx_try))):
-                    break
-                alpha *= self.alpha_factor
-
-            if alpha < self.min_alpha:
-                print(" Не удалось подобрать шаг на итерации", k)
-                return None, {"status": "line_search_failed", "iter": k, "x": x, "history": history}
-
-            x = x + alpha * dx
-            history.append({"iter": k, "x": x.copy(), "δ1": delta_f, "δ2": rel_change})
-
-            if verbose:
-                print(f"{k:3d}: δ1={delta_f:.3e}  δ2={rel_change:.3e}  α={alpha:.2f}  x={x}")
-
-            # условие остановки
-            if delta_f <= self.eps_f and rel_change <= self.eps_x:
-                return x, {"status": "converged", "iter": k, "x": x, "history": history}
-
-        return x, {"status": "no_convergence", "iter": self.max_iter, "x": x, "history": history}
+# --- Вектор функций системы (пример: задача №1 из таблицы 2.1) ---
+def f_vec(x):
+    x1, x2 = x[0], x[1]
+    arg = 1.0 + (x1 + x2) / 5.0
+    if arg <= 0:
+        # защита: если логарифм не определён, возвращаем большую невязку
+        return np.array([1e6, 1e6], dtype=float)
+    f1 = math.log(arg) - math.sin(x2 / 3.0) - x1 + 1.1
+    f2 = math.cos((x1 * x2) / 6.0) - x2 + 0.5
+    return np.array([f1, f2], dtype=float)
 
 
-# --- Лабораторная №2, Задача №1 ---
+# --- Аналитический Якобиан ---
+def J_analytic(x):
+    x1, x2 = x[0], x[1]
+    denom = 5.0 + x1 + x2
+    if abs(denom) < 1e-16:
+        denom = 1e-16
+    df1_dx1 = 1.0 / denom - 1.0
+    df1_dx2 = 1.0 / denom - (1.0 / 3.0) * math.cos(x2 / 3.0)
+    df2_dx1 = - (x2 / 6.0) * math.sin((x1 * x2) / 6.0)
+    df2_dx2 = - (x1 / 6.0) * math.sin((x1 * x2) / 6.0) - 1.0
+    return np.array([[df1_dx1, df1_dx2],
+                     [df2_dx1, df2_dx2]], dtype=float)
 
-def F_task1(v):
-    x1, x2 = v
-    if x2 + 1.5 <= 0:  # защита от log отрицательного
-        return np.array([np.nan, np.nan])
-    return np.array([
-        np.log(x2 + 1.5) + x1 - 0.5,
-        x2 - 6 * np.cos(x1 + 3)
-    ])
 
-def J_task1(v):
-    x1, x2 = v
-    return np.array([
-        [1.0, 1.0 / (x2 + 1.5)],
-        [6 * np.sin(x1 + 3), 1.0]
-    ])
+# --- Численный Якобиан (центральная разность) ---
+def J_numeric(x, M):
+    n = len(x)
+    J = np.zeros((n, n), dtype=float)
+    for j in range(n):
+        dx = M * max(abs(x[j]), 1.0)
+        if dx == 0:
+            dx = 1e-12
+        xp = x.copy()
+        xm = x.copy()
+        xp[j] += dx
+        xm[j] -= dx
+        fp = f_vec(xp)
+        fm = f_vec(xm)
+        J[:, j] = (fp - fm) / (2.0 * dx)
+    return J
+
+
+# --- Метод Гаусса с выбором главного элемента ---
+def gauss_solve(A, b):
+    A = A.astype(float).copy()
+    b = b.astype(float).copy()
+    n = len(b)
+
+    for k in range(n):
+        # выбор главного элемента
+        max_row = k + np.argmax(np.abs(A[k:, k]))
+        if abs(A[max_row, k]) < 1e-14:
+            raise ZeroDivisionError("Нулевой ведущий элемент")
+
+        if max_row != k:
+            A[[k, max_row]] = A[[max_row, k]]
+            b[[k, max_row]] = b[[max_row, k]]
+
+        for i in range(k + 1, n):
+            m = A[i, k] / A[k, k]
+            A[i, k:] -= m * A[k, k:]
+            b[i] -= m * b[k]
+
+    x = np.zeros(n)
+    for i in range(n - 1, -1, -1):
+        s = np.dot(A[i, i + 1:], x[i + 1:])
+        x[i] = (b[i] - s) / A[i, i]
+
+    return x
+
+
+# --- Метод Ньютона ---
+def newton_method(x0, J_mode='analytic', M=0.01, eps1=1e-9, eps2=1e-9, max_iter=100):
+    x = np.array(x0, dtype=float)
+    print()
+    if J_mode == 'analytic':
+        print("МЕТОД НЬЮТОНА — АНАЛИТИЧЕСКИЙ ЯКОБИАН")
+    else:
+        print(f"МЕТОД НЬЮТОНА — ЧИСЛЕННЫЙ ЯКОБИАН, M = {M}")
+
+    print(" k |      x1       |      x2       |      f1      |      f2      |     Δx1      |     Δx2      |   δ1=||F||∞  |   δ2=||Δx||∞")
+    print("-" * 120)
+
+    for k in range(1, max_iter + 1):
+        F = f_vec(x)
+        J = J_analytic(x) if J_mode == 'analytic' else J_numeric(x, M)
+
+        detJ = np.linalg.det(J)
+        if abs(detJ) < 1e-12:
+            print(f"ПРЕРВАНО: Вырожденный Якобиан (det = {detJ:.2e}) на итерации {k}")
+            return x, k
+
+        delta = gauss_solve(J, -F)
+        x_new = x + delta
+
+        # δ1 и δ2 по формулам (2.4)
+        delta1 = np.max(np.abs(F))
+        delta2 = np.max(np.abs(delta) / np.maximum(np.abs(x_new), 1.0))
+
+        print(f"{k:2d} | {x_new[0]: .10f} | {x_new[1]: .10f} | {F[0]: .4e} | {F[1]: .4e} | {delta[0]: .4e} | {delta[1]: .4e} | {delta1: .4e} | {delta2: .4e}")
+
+        # критерий остановки
+        if delta1 < eps1 and delta2 < eps2:
+            print("-" * 120)
+            print(f"СОШЛОСЬ за {k} итераций: x1 = {x_new[0]:.10f}, x2 = {x_new[1]:.10f}, ||F||∞ = {delta1:.3e}")
+            return x_new, k
+
+        x = x_new
+
+    print("-" * 120)
+    print(f"Не сошлось за {max_iter} итераций. Последнее приближение: x1 = {x[0]:.10f}, x2 = {x[1]:.10f}, ||F||∞ = {np.max(np.abs(f_vec(x))):.3e}")
+    return x, max_iter
+
+
+# --- Основная программа ---
+def main():
+    x0 = [8.0, 8.0]     # начальное приближение
+    eps1 = 1e-9
+    eps2 = 1e-9
+    max_iter = 50
+
+    # Аналитический Якобиан
+    newton_method(x0, J_mode='analytic', eps1=eps1, eps2=eps2, max_iter=max_iter)
+
+    # Численный Якобиан для разных M
+    for M in [0.01, 0.05, 0.1]:
+        newton_method(x0, J_mode='numeric', M=M, eps1=eps1, eps2=eps2, max_iter=max_iter)
 
 
 if __name__ == "__main__":
-    x0 = np.array([1.0, 1.0])  # начальное приближение из таблицы 2.1
-
-    solver = NewtonSystemSolver(F_task1, J_analytic=J_task1,
-                                eps_f=1e-9, eps_x=1e-9,
-                                max_iter=200, jacobian_M=0.01)
-
-    sol, info = solver.solve(x0, verbose=True)
-
-    if info["status"] == "converged":
-        print("\n Метод сошёлся")
-        print("Итераций:", info["iter"])
-        print("x* =", info["x"])
-        print("F(x*) =", F_task1(info["x"]))
-    else:
-        print("\n️ Метод не сошёлся:", info["status"])
+    main()
