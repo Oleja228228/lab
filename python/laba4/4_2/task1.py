@@ -16,5 +16,5 @@ else:
     print("Расходы одинаковые.")
 
 max_value = expenses.max()
-max_months = np.where(expenses == max_value)[0] + 1 
+max_months = np.where(expenses == max_value)[0] + 1
 print(f"Наибольшие расходы были в месяцах: {max_months}")
