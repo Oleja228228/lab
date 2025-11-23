@@ -1,16 +1,19 @@
-# This is a sample Python script.
+def count_words(sentence: str) -> int:
+    if not sentence:
+        return 0
+    return len(sentence.split())
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+def find_unique(lst):
+    return [x for x in lst if lst.count(x) == 1]
 
+def is_palindrome(s):
+    s_str = str(s)
+    return s_str == s_str[::-1]
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+def are_anagrams(str1, str2):
+    return sorted(str1.replace(" ", "").lower()) == sorted(str2.replace(" ", "").lower())
 
-
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
-
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+def combine_dicts(d1, d2):
+    combined = d1.copy()
+    combined.update(d2)
+    return combined
