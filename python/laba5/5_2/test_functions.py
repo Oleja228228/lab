@@ -23,7 +23,7 @@ def test_are_anagrams():
     assert are_anagrams("listen", "silent") is True
     assert are_anagrams("triangle", "integral") is True
     assert are_anagrams("hello", "billion") is False
-    assert are_anagrams("Dormitory", "Dirty room") is True  
+    assert are_anagrams("Dormitory", "Dirty room") is True
 
 def test_combine_dicts():
     d1 = {"a": 1, "b": 2}
