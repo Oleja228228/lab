@@ -1,0 +1,80 @@
+Index: ../../laba5/test_pytest.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/../../laba5/test_pytest.py b/../../laba5/test_pytest.py
+new file mode 100644
+--- /dev/null	(date 1765373277359)
++++ b/../../laba5/test_pytest.py	(date 1765373277359)
+@@ -0,0 +1,51 @@
++from test import count_digits
++
++def test_empty_string():
++    assert count_digits("") == 0
++
++
++def test_only_letters():
++    assert count_digits("abcdef") == 0
++
++
++def test_only_digits():
++    assert count_digits("12345") == 4
++
++
++def test_mixed_string():
++    assert count_digits("a1b2c3") == 3
++
++
++def test_with_spaces():
++    assert count_digits("1 2 3") == 3
++
++
++def test_with_symbols():
++    assert count_digits("!@#123$%^") == 3
++
++def test_long_string():
++    assert count_digits("a" * 1000 + "12345") == 5
++
++
++def test_only_spaces():
++    assert count_digits("     ") == 0
++
++
++def test_newlines_and_tabs():
++    assert count_digits("1\n2\t3") == 3
++
++
++def test_negative_sign_like_text():
++    assert count_digits("-123") == 3
++
++
++def test_float_like_string():
++    assert count_digits("3.14") == 3
++
++
++def test_non_string_input():
++    try:
++        count_digits(12345)
++        assert False
++    except TypeError:
++        assert True
+\ No newline at end of file
+Index: ../../laba5/test.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/../../laba5/test.py b/../../laba5/test.py
+new file mode 100644
+--- /dev/null	(date 1765371671028)
++++ b/../../laba5/test.py	(date 1765371671028)
+@@ -0,0 +1,7 @@
++#функция которая будет определять количество цифр в строке и написать и пайтесты  для нее
++def count_digits(s):
++    count = 0
++    for ch in s:
++        if ch.isdigit():
++            count += 1
++    return count
+\ No newline at end of file

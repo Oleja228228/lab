@@ -1,0 +1,146 @@
+Index: ../../laba5/test_pytest.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/../../laba5/test_pytest.py b/../../laba5/test_pytest.py
+new file mode 100644
+--- /dev/null	(date 1765460256843)
++++ b/../../laba5/test_pytest.py	(date 1765460256843)
+@@ -0,0 +1,51 @@
++from test import count_digits
++
++def test_empty_string():
++    assert count_digits("") == 0
++
++
++def test_only_letters():
++    assert count_digits("abcdef") == 0
++
++
++def test_only_digits():
++    assert count_digits("12345") == 4
++
++
++def test_mixed_string():
++    assert count_digits("a1b2c3") == 3
++
++
++def test_with_spaces():
++    assert count_digits("1 2 3") == 3
++
++
++def test_with_symbols():
++    assert count_digits("!@#123$%^") == 3
++
++def test_long_string():
++    assert count_digits("a" * 1000 + "12345") == 5
++
++
++def test_only_spaces():
++    assert count_digits("     ") == 0
++
++
++def test_newlines_and_tabs():
++    assert count_digits("1\n2\t3") == 3
++
++
++def test_negative_sign_like_text():
++    assert count_digits("-123") == 3
++
++
++def test_float_like_string():
++    assert count_digits("3.14") == 3
++
++
++def test_non_string_input():
++    try:
++        count_digits(12345)
++        assert False
++    except TypeError:
++        assert True
+\ No newline at end of file
+Index: ../../laba5/test.py
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/../../laba5/test.py b/../../laba5/test.py
+new file mode 100644
+--- /dev/null	(date 1765460256884)
++++ b/../../laba5/test.py	(date 1765460256884)
+@@ -0,0 +1,7 @@
++#функция которая будет определять количество цифр в строке и написать и пайтесты  для нее
++def count_digits(s):
++    count = 0
++    for ch in s:
++        if ch.isdigit():
++            count += 1
++    return count
+\ No newline at end of file
+Index: ../4_2/.idea/workspace.xml
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+><?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<project version=\"4\">\r\n  <component name=\"ChangeListManager\">\r\n    <list default=\"true\" id=\"93f4191d-a5e2-4a40-bbe8-75da6a1add80\" name=\"Changes\" comment=\"\" />\r\n    <option name=\"SHOW_DIALOG\" value=\"false\" />\r\n    <option name=\"HIGHLIGHT_CONFLICTS\" value=\"true\" />\r\n    <option name=\"HIGHLIGHT_NON_ACTIVE_CHANGELIST\" value=\"false\" />\r\n    <option name=\"LAST_RESOLUTION\" value=\"IGNORE\" />\r\n  </component>\r\n  <component name=\"Git.Settings\">\r\n    <option name=\"RECENT_GIT_ROOT_PATH\" value=\"$PROJECT_DIR$/../../..\" />\r\n  </component>\r\n  <component name=\"ProjectColorInfo\"><![CDATA[{\r\n  \"customColor\": \"\",\r\n  \"associatedIndex\": 0\r\n}]]></component>\r\n  <component name=\"ProjectId\" id=\"35ICAslxqNj3iYmKtEbpdZ7tVGb\" />\r\n  <component name=\"ProjectViewState\">\r\n    <option name=\"hideEmptyMiddlePackages\" value=\"true\" />\r\n    <option name=\"showLibraryContents\" value=\"true\" />\r\n  </component>\r\n  <component name=\"PropertiesComponent\"><![CDATA[{\r\n  \"keyToString\": {\r\n    \"RunOnceActivity.ShowReadmeOnStart\": \"true\",\r\n    \"RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252\": \"true\",\r\n    \"RunOnceActivity.git.unshallow\": \"true\",\r\n    \"git-widget-placeholder\": \"laba4__2\"\r\n  }\r\n}]]></component>\r\n  <component name=\"SharedIndexes\">\r\n    <attachedChunks>\r\n      <set>\r\n        <option value=\"bundled-python-sdk-ce6832f46686-7b97d883f26b-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-252.25557.178\" />\r\n      </set>\r\n    </attachedChunks>\r\n  </component>\r\n  <component name=\"TaskManager\">\r\n    <task active=\"true\" id=\"Default\" summary=\"Default task\">\r\n      <changelist id=\"93f4191d-a5e2-4a40-bbe8-75da6a1add80\" name=\"Changes\" comment=\"\" />\r\n      <created>1762788068986</created>\r\n      <option name=\"number\" value=\"Default\" />\r\n      <option name=\"presentableId\" value=\"Default\" />\r\n      <updated>1762788068986</updated>\r\n    </task>\r\n    <servers />\r\n  </component>\r\n</project>
+===================================================================
+diff --git a/../4_2/.idea/workspace.xml b/../4_2/.idea/workspace.xml
+--- a/../4_2/.idea/workspace.xml	(revision b436b4f7d330663ced0651191ade7082c95a9a0e)
++++ b/../4_2/.idea/workspace.xml	(date 1765460286890)
+@@ -1,7 +1,7 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <project version="4">
+   <component name="ChangeListManager">
+-    <list default="true" id="93f4191d-a5e2-4a40-bbe8-75da6a1add80" name="Changes" comment="" />
++    <list default="true" id="ca10be89-ec30-40df-9c09-179e52b3b8b7" name="Changes" comment="" />
+     <option name="SHOW_DIALOG" value="false" />
+     <option name="HIGHLIGHT_CONFLICTS" value="true" />
+     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+@@ -10,10 +10,22 @@
+   <component name="Git.Settings">
+     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$/../../.." />
+   </component>
+-  <component name="ProjectColorInfo"><![CDATA[{
+-  "customColor": "",
+-  "associatedIndex": 0
++  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
++  "lastFilter": {
++    "state": "OPEN",
++    "assignee": "Oleja228228"
++  }
+ }]]></component>
++  <component name="GithubPullRequestsUISettings"><![CDATA[{
++  "selectedUrlAndAccountId": {
++    "url": "https://github.com/Oleja228228/lab.git",
++    "accountId": "f51abeba-54a4-4004-a4f5-5b510cf82143"
++  }
++}]]></component>
++  <component name="ProjectColorInfo">{
++  &quot;customColor&quot;: &quot;&quot;,
++  &quot;associatedIndex&quot;: 0
++}</component>
+   <component name="ProjectId" id="35ICAslxqNj3iYmKtEbpdZ7tVGb" />
+   <component name="ProjectViewState">
+     <option name="hideEmptyMiddlePackages" value="true" />
+@@ -23,8 +35,7 @@
+   "keyToString": {
+     "RunOnceActivity.ShowReadmeOnStart": "true",
+     "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+-    "RunOnceActivity.git.unshallow": "true",
+-    "git-widget-placeholder": "laba4__2"
++    "RunOnceActivity.git.unshallow": "true"
+   }
+ }]]></component>
+   <component name="SharedIndexes">
+Index: .idea/.name
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.BaseRevisionTextPatchEP
+<+>task1.py
+===================================================================
+diff --git a/.idea/.name b/.idea/.name
+--- a/.idea/.name	(revision b436b4f7d330663ced0651191ade7082c95a9a0e)
++++ b/.idea/.name	(date 1765460775476)
+@@ -1,1 +1,1 @@
+-task1.py
+\ No newline at end of file
++task3.py
+\ No newline at end of file
