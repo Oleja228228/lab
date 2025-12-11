@@ -1,21 +1,20 @@
 import random
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from pathlib import Path
+from faker import Faker
 
-random.seed(42)
-np.random.seed(42)
+RND_SEED = 42
+random.seed(RND_SEED)
+np.random.seed(RND_SEED)
+Faker.seed(RND_SEED)
+fake = Faker("ru_RU")
 
-years = list(range(2021, 2026))  # 2021..2025
+years = list(range(2021, 2026))
 n_per_year = {2021: 220, 2022: 240, 2023: 260, 2024: 280, 2025: 300}
-
-first_names = ["Александр","Дмитрий","Максим","Сергей","Илья","Егор","Никита","Михаил","Андрей","Роман",
-               "Анна","Мария","Екатерина","Ольга","Ирина","Александра","Елена","Наталья","Светлана","Виктория"]
-last_names = ["Иванов","Петров","Сидоров","Кузнецов","Смирнов","Попов","Соколов","Лебедев","Козлов","Новиков",
-              "Соколова","Морозова","Васильева","Павлова","Кузьмина","Соловьёва","Егорова","Фёдорова","Медведева","Баранова"]
-patronymics_m = ["Иванович","Петрович","Алексеевич","Сергеевич","Михайлович","Никитич","Владимирович","Денисович"]
-patronymics_f = ["Ивановна","Петровна","Алексеевна","Сергеевна","Михайловна","Никитична","Владимировна","Денисовна"]
+subjects = ["Математика", "Русский язык", "Физика", "Биология", "Химия", "История", "Информатика"]
 
 forms = ["очная", "очно-заочная", "заочная"]
 specialties = [
@@ -29,109 +28,156 @@ specialties = [
     "Экономика"
 ]
 
-subjects = ["Математика", "Русский язык", "Физика", "Биология", "Химия", "История", "Информатика"]
+def gen_years_list(years, n_per_year):
+    lst = []
+    for y in years:
+        lst.extend([y] * n_per_year[y])
+    return lst
 
-def gen_phone():
-    return "+375" + "".join(str(random.randint(0,9)) for _ in range(9))
+def gen_phone_with_faker(n):
+    phones = []
+    for _ in range(n):
+        p = fake.phone_number()
+        p = p.replace(" ", "").replace("(", "").replace(")", "").replace("-", "")
+        phones.append(p)
+    return phones
 
-def gen_address():
-    cities = ["Москва","Санкт-Петербург","Новосибирск","Екатеринбург","Казань","Нижний Новгород","Воронеж","Краснодар","Пермь","Самара"]
-    streets = ["Ленина","Советская","Мира","Победы","Центральная","Школьная","Новая","Зелёная","Строителей","Пролетарская"]
-    return f"{random.choice(cities)}, ул. {random.choice(streets)}, д. {random.randint(1,200)}, кв. {random.randint(1,200)}"
+def gen_address_with_faker(n):
+    arr = []
+    for _ in range(n):
+        city = fake.city()
+        street = fake.street_name()
+        house = fake.building_number()
+        apt = fake.random_int(min=1, max=250)
+        arr.append(f"{city}, ул. {street}, д. {house}, кв. {apt}")
+    return arr
 
-def gen_fullname(gender):
-    if gender == "m":
-        first = random.choice(first_names[:10])
-        last = random.choice(last_names[:10])
-        patron = random.choice(patronymics_m)
+def make_patronymic_from_father(father_name: str, gender: str):
+    fn = father_name.strip()
+    if not fn:
+        return ""
+    last_char = fn[-1]
+    if last_char in ("а", "я"):
+        stem = fn[:-1]
+        male = stem + "ович"
+        female = stem + "овна"
+    elif last_char == "й":
+        stem = fn[:-1]
+        male = stem + "евич"
+        female = stem + "евна"
+    elif last_char == "ь":
+        stem = fn[:-1]
+        male = stem + "евич"
+        female = stem + "евна"
     else:
-        first = random.choice(first_names[10:])
-        last = random.choice(last_names[10:])
-        patron = random.choice(patronymics_f)
-    return f"{last} {first} {patron}"
+        male = fn + "ович"
+        female = fn + "овна"
+    return male if gender == "m" else female
 
-records = []
+def gen_full_names_faker(n, genders_array):
+    fio = []
+    for g in genders_array:
+        if g == "m":
+            first = fake.first_name_male()
+            last = fake.last_name_male()
+        else:
+            first = fake.first_name_female()
+            last = fake.last_name_female()
+        # отец — всегда мужское имя
+        father = fake.first_name_male()
+        patron = make_patronymic_from_father(father, g)
+        fio.append(f"{last} {first} {patron}")
+    return fio
 
-for year in years:
-    n = n_per_year.get(year, 200)
-    for i in range(n):
-        gender = random.choices(["m","f"], weights=[0.52,0.48])[0]
-        fio = gen_fullname(gender)
-        form = random.choices(forms, weights=[0.65,0.15,0.20])[0]
-        taken_subjects = random.sample(subjects, k=3)
-        ce_scores = {}
-        for subj in subjects:
-            if subj in taken_subjects:
-                # базовый уровень + небольшая трендовая компонента по годам
-                base = 65 + (years.index(year) - 2) * 0.5
-                score = np.clip(np.random.normal(loc=base + random.uniform(-5,5), scale=10), 40, 100)
-                ce_scores[subj] = round(float(score),1)
-            else:
-                ce_scores[subj] = np.nan
-        cert_avg = np.clip(np.random.normal(loc=78 + (years.index(year)-2)*0.3, scale=6), 50, 100)
-        cert_avg = round(float(cert_avg),1)
-        specialty = random.choice(specialties)
-        ce_taken = [v for v in ce_scores.values() if not pd.isna(v)]
-        ce_mean = np.mean(ce_taken) if ce_taken else 60.0
-        total_score = round(0.65*ce_mean + 0.35*cert_avg + random.uniform(-2,2),1)
-        address = gen_address()
-        phone = gen_phone()
-        records.append({
-            "ФИО": fio,
-            "Пол": "М" if gender=="m" else "Ж",
-            "Год поступления": year,
-            "Форма обучения": form,
-            **{f"Балл ЦТ: {s}": ce_scores[s] for s in subjects},
-            "Средний балл аттестата": cert_avg,
-            "Общий балл при поступлении": total_score,
-            "Специальность": specialty,
-            "Адрес регистрации": address,
-            "Телефон": phone
-        })
+years_list = gen_years_list(years, n_per_year)
+N = len(years_list)
 
-df = pd.DataFrame(records)
+genders = np.array([fake.random_element(elements=("m", "f")) for _ in range(N)])
 
-capacities = {}
-for year in years:
-    for spec in specialties:
-        base = 30 if ("Информатика" in spec or "Экономика" in spec) else 20
-        cap = int(np.clip(np.random.normal(loc=base, scale=6), 8, 60))
-        capacities[(year, spec)] = cap
+forms_arr = [fake.random_element(elements=forms) for _ in range(N)]
+specialties_arr = [fake.random_element(elements=specialties) for _ in range(N)]
+
+fio_arr = gen_full_names_faker(N, genders)
+phones = gen_phone_with_faker(N)
+addresses = gen_address_with_faker(N)
+
+taken_subjects = [fake.random_elements(elements=subjects, length=3, unique=True) for _ in range(N)]
+
+df = pd.DataFrame({
+    "ФИО": fio_arr,
+    "Пол": np.where(genders == "m", "М", "Ж"),
+    "Год поступления": years_list,
+    "Форма обучения": forms_arr,
+    "Специальность": specialties_arr,
+    "Адрес регистрации": addresses,
+    "Телефон": phones
+})
+
+year_index = df["Год поступления"].map(lambda y: years.index(y))  # 0..4
+cert_loc = 78 + (year_index - 2) * 0.3
+cert_avgs = np.clip(np.random.normal(loc=cert_loc, scale=6.0), 50, 100).round(1)
+df["Средний балл аттестата"] = cert_avgs
+
+for subj in subjects:
+    df[f"Балл ЦТ: {subj}"] = np.nan
+
+for i, subj_list in enumerate(taken_subjects):
+    y = df.at[i, "Год поступления"]
+    base = 65 + (years.index(y) - 2) * 0.5
+    for subj in subj_list:
+        score = float(np.clip(np.random.normal(loc=base + random.uniform(-5, 5), scale=10.0), 40, 100))
+        df.at[i, f"Балл ЦТ: {subj}"] = round(score, 1)
+
+subj_cols = [f"Балл ЦТ: {s}" for s in subjects]
+df["CE_mean"] = df[subj_cols].mean(axis=1)
+df["Общий балл при поступлении"] = (
+    0.65 * df["CE_mean"] + 0.35 * df["Средний балл аттестата"] + np.random.uniform(-2, 2, size=N)
+).round(1)
+
+pairs = pd.MultiIndex.from_product([years, specialties], names=["Год", "Специальность"])
+base_vals = [30 if ("Информатика" in spec or "Экономика" in spec) else 20 for spec in specialties]
+base_repeated = np.tile(base_vals, len(years))
+caps = np.clip(np.random.normal(loc=base_repeated, scale=6.0), 8, 60).round().astype(int)
+capacities = pd.DataFrame({
+    "Год": pairs.get_level_values(0),
+    "Специальность": pairs.get_level_values(1),
+    "Вместимость": caps
+})
 
 df["Поступил"] = False
-for (year, spec), cap in capacities.items():
-    mask = (df["Год поступления"]==year) & (df["Специальность"]==spec)
-    sub = df[mask].sort_values("Общий балл при поступлении", ascending=False)
-    admitted_idx = sub.head(cap).index
-    df.loc[admitted_idx, "Поступил"] = True
 
-cutoffs = []
-for year in years:
-    for spec in specialties:
-        sub = df[(df["Год поступления"]==year) & (df["Специальность"]==spec) & (df["Поступил"])]
-        if not sub.empty:
-            cutoff = float(sub["Общий балл при поступлении"].min())
-            count = len(sub)
-        else:
-            cutoff = np.nan
-            count = 0
-        cutoffs.append({"Год": year, "Специальность": spec, "Проходной балл": cutoff, "Поступивших": count})
-df_cutoffs = pd.DataFrame(cutoffs)
+def admit_top_k(group):
+    year = group.name[0]
+    spec = group.name[1]
+    k = capacities.loc[(capacities["Год"] == year) & (capacities["Специальность"] == spec), "Вместимость"].iat[0]
+    if k <= 0:
+        return pd.Series(False, index=group.index)
+    top_idx = group["Общий балл при поступлении"].nlargest(k).index
+    mask = group.index.isin(top_idx)
+    return pd.Series(mask, index=group.index)
+
+grouped = df.groupby(["Год поступления", "Специальность"])
+admitted_mask = grouped.apply(lambda g: admit_top_k(g), include_groups=False).reset_index(level=[0,1], drop=True)
+df.loc[admitted_mask.index, "Поступил"] = admitted_mask.values.astype(bool)
+
+cutoffs = df[df["Поступил"]].groupby(["Год поступления", "Специальность"])["Общий балл при поступлении"].min().reset_index()
+cutoffs = cutoffs.rename(columns={"Год поступления": "Год", "Общий балл при поступлении": "Проходной балл"})
+pivot_cutoff = cutoffs.pivot(index="Год", columns="Специальность", values="Проходной балл").reindex(index=years)
 
 out_dir = Path.cwd() / "output_data"
 out_dir.mkdir(exist_ok=True, parents=True)
-csv_path = out_dir / "admissions_synthetic.csv"
+csv_path = out_dir / "admissions_synthetic_all_faker.csv"
 df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+pivot_path = out_dir / "cutoffs_pivot_all_faker.csv"
+pivot_cutoff.to_csv(pivot_path, encoding="utf-8-sig")
+
 print(f"CSV сохранён: {csv_path}")
+print(f"Пивот-таблица сохранена: {pivot_path}")
 
-subject_means = {}
-for subj in subjects:
-    yearly = df.groupby("Год поступления")[f"Балл ЦТ: {subj}"].mean()
-    subject_means[subj] = yearly
-
-plt.figure(figsize=(10,6))
-for subj, series in subject_means.items():
-    plt.plot(series.index, series.values, marker='o', label=subj)
+subject_means = df.groupby("Год поступления")[subj_cols].mean().rename(columns=lambda c: c.replace("Балл ЦТ: ", ""))
+plt.figure(figsize=(10, 6))
+for col in subject_means.columns:
+    plt.plot(subject_means.index, subject_means[col], marker='o', label=col)
 plt.title("Динамика среднего балла ЦТ по предметам (среднее по годам)")
 plt.xlabel("Год поступления")
 plt.ylabel("Средний балл ЦТ (по предмету)")
@@ -140,8 +186,8 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-plt.figure(figsize=(8,5))
 cert_by_year = df.groupby("Год поступления")["Средний балл аттестата"].mean()
+plt.figure(figsize=(8, 5))
 plt.plot(cert_by_year.index, cert_by_year.values, marker='o')
 plt.title("Динамика среднего балла аттестата по годам")
 plt.xlabel("Год поступления")
@@ -151,20 +197,22 @@ plt.tight_layout()
 plt.show()
 
 for spec in specialties:
-    spec_df = df_cutoffs[df_cutoffs["Специальность"]==spec].sort_values("Год")
-    plt.figure(figsize=(8,4))
-    plt.plot(spec_df["Год"], spec_df["Проходной балл"], marker='o')
-    plt.title(f"Динамика проходного балла: {spec}")
-    plt.xlabel("Год")
-    plt.ylabel("Проходной балл (минимум среди поступивших)")
-    plt.ylim(40, 100)
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    if spec in pivot_cutoff.columns:
+        ser = pivot_cutoff[spec]
+        if ser.notna().any():
+            plt.figure(figsize=(8, 4))
+            plt.plot(ser.index, ser.values, marker='o')
+            plt.title(f"Динамика проходного балла: {spec}")
+            plt.xlabel("Год")
+            plt.ylabel("Проходной балл (минимум среди поступивших)")
+            plt.ylim(40, 100)
+            plt.grid(True)
+            plt.tight_layout()
+            plt.show()
 
 agg_admitted = df[df["Поступил"]].groupby("Специальность")["Поступил"].count().sort_values(ascending=False)
-plt.figure(figsize=(10,6))
-plt.bar(agg_admitted.index, agg_admitted.values)
+plt.figure(figsize=(10, 6))
+agg_admitted.plot(kind="bar")
 plt.title("Количество поступивших студентов по специальностям (всего за 2021-2025)")
 plt.xlabel("Специальность")
 plt.ylabel("Количество поступивших")
@@ -173,21 +221,15 @@ plt.tight_layout()
 plt.show()
 
 forms_stats = df[df["Поступил"]].groupby("Форма обучения")["Поступил"].count()
-plt.figure(figsize=(6,5))
-plt.bar(forms_stats.index, forms_stats.values)
+plt.figure(figsize=(6, 5))
+forms_stats.plot(kind="bar")
 plt.title("Распределение поступивших по формам обучения")
 plt.xlabel("Форма обучения")
 plt.ylabel("Количество поступивших")
 plt.tight_layout()
 plt.show()
 
-pivot_cutoff = df_cutoffs.pivot(index="Год", columns="Специальность", values="Проходной балл").round(1)
-print("\nПивот-таблица проходных баллов (минимум среди поступивших):")
-print(pivot_cutoff)
-
-pivot_path = out_dir / "cutoffs_pivot.csv"
-pivot_cutoff.to_csv(pivot_path, encoding="utf-8-sig")
-print(f"\nПивот-таблица сохранена: {pivot_path}")
-
 print("\nПример строк данных:")
 print(df.head(10).to_string(index=False))
+print("\nПивот-таблица проходных баллов (минимум среди поступивших):")
+print(pivot_cutoff.round(1))
