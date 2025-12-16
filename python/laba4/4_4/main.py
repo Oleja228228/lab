@@ -1,205 +1,138 @@
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-import numpy as np
-import os
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
 import warnings
-warnings.filterwarnings("ignore")
 
-sns.set_theme(style="whitegrid")
-
-FILE = "s7_data_sample_rev4_50k.xlsx"
-
-if not os.path.exists(FILE):
-    raise FileNotFoundError(f"Файл не найден: {FILE}")
-
-df = pd.read_excel(FILE)
-
-# ===================== ПОДГОТОВКА ДАННЫХ =====================
-df["ISSUE_DATE"] = pd.to_datetime(df["ISSUE_DATE"], errors="coerce")
-df["FLIGHT_DATE_LOC"] = pd.to_datetime(df["FLIGHT_DATE_LOC"], errors="coerce")
-
-print("Информация о данных:")
-print(df.info())
-
-print("\nПример строк:")
-print(df.head())
-
-print("\n=== Описательная статистика по REVENUE_AMOUNT ===")
-print(df["REVENUE_AMOUNT"].describe())
-
-# ---------------------- Гистограмма продаж ----------------------
-plt.figure(figsize=(8, 5))
-sns.histplot(df["REVENUE_AMOUNT"].dropna(), bins=50, kde=True)
-plt.title("Распределение сумм продаж (REVENUE_AMOUNT)")
-plt.xlabel("Сумма продажи")
-plt.ylabel("Количество билетов")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Доп. признаки ----------------------
-df["Month"] = df["ISSUE_DATE"].dt.month
-month_sum = df.groupby("Month", as_index=False)["REVENUE_AMOUNT"].sum()
-
-plt.figure(figsize=(10, 5))
-ax = sns.barplot(x="Month", y="REVENUE_AMOUNT", data=month_sum,
-                 hue="Month", dodge=False, palette="crest")
-if ax.get_legend() is not None:
-    ax.get_legend().remove()
-plt.title("Суммарные продажи по месяцам")
-plt.xlabel("Месяц")
-plt.ylabel("Сумма продаж")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Топ направлений ----------------------
-top_routes = df["ORIG_CITY_CODE"].value_counts().head(10).reset_index()
-top_routes.columns = ["ORIG_CITY_CODE", "count"]
-
-plt.figure(figsize=(10, 5))
-ax = sns.barplot(x="ORIG_CITY_CODE", y="count", data=top_routes,
-                 hue="ORIG_CITY_CODE", dodge=False, palette="mako")
-if ax.get_legend() is not None:
-    ax.get_legend().remove()
-plt.title("Топ-10 аэропортов отправления")
-plt.xlabel("Город вылета (код)")
-plt.ylabel("Количество продаж")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Способы оплаты ----------------------
-plt.figure(figsize=(6, 6))
-df["FOP_TYPE_CODE"].value_counts().plot(kind="pie", autopct="%1.1f%%")
-plt.title("Распределение способов оплаты (FOP_TYPE_CODE)")
-plt.ylabel("")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Каналы продаж ----------------------
-plt.figure(figsize=(6, 5))
-ax = sns.countplot(x="SALE_TYPE", data=df, hue="SALE_TYPE", dodge=False, palette="Set2")
-if ax.get_legend() is not None:
-    ax.get_legend().remove()
-plt.title("Каналы продаж (ONLINE / OFFLINE)")
-plt.xlabel("Тип продажи")
-plt.ylabel("Количество билетов")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Участие в FFP ----------------------
-plt.figure(figsize=(6, 5))
-ax = sns.countplot(x="FFP_FLAG", data=df, hue="FFP_FLAG", dodge=False, palette="viridis")
-if ax.get_legend() is not None:
-    ax.get_legend().remove()
-plt.title("Доля участников программы лояльности (FFP_FLAG)")
-plt.xlabel("FFP_FLAG")
-plt.ylabel("Количество билетов")
-plt.tight_layout()
-plt.show()
-
-# ---------------------- Динамика продаж ----------------------
-daily_sales = df.groupby("ISSUE_DATE", as_index=False)["REVENUE_AMOUNT"].sum().dropna()
-daily_sales = daily_sales.sort_values("ISSUE_DATE")
-
-plt.figure(figsize=(12, 5))
-plt.plot(daily_sales["ISSUE_DATE"], daily_sales["REVENUE_AMOUNT"])
-plt.title("Динамика продаж по дням (REVENUE_AMOUNT)")
-plt.xlabel("Дата")
-plt.ylabel("Сумма продаж")
-plt.tight_layout()
-plt.show()
-
-# ======================= УСТОЙЧИВЫЙ ПРОГНОЗ: HOLT-WINTERS с защитой от отрицательных значений =======================
-from statsmodels.tsa.holtwinters import ExponentialSmoothing
-import numpy as np
-
-print("\nСтрою устойчивый прогноз Holt-Winters (с защитой от отрицаний)...")
-
-# Подготовка временного ряда
-ts = daily_sales.set_index("ISSUE_DATE")["REVENUE_AMOUNT"].copy()
-ts = ts.asfreq("D").fillna(method="ffill")
-
-# Если в данных есть отрицательные или нулевые значения — добавим маленький сдвиг для лог-преобразований
-min_val = ts.min()
-shift = 0.0
-if min_val <= 0:
-    shift = abs(min_val) + 1e-6
-    print(f"Найдено min={min_val:.3f} -> добавляю сдвиг {shift:.6f} для лог-преобразования")
-
-forecast_steps = 90
+warnings.filterwarnings('ignore')
+sns.set(style="whitegrid")
 
 try:
-    # Пробуем мультипликативную сезонность (обычно лучше, если амплитуда растёт с уровнем)
-    model_hw = ExponentialSmoothing(
-        ts,
-        trend="add",
-        seasonal="mul",
-        seasonal_periods=7,
-    ).fit()
-    use_log = False
-    print("Использована модель: trend='add', seasonal='mul'")
+    df = pd.read_excel('s7_data_sample_rev4_50k.xlsx')
+except FileNotFoundError:
+    print("Файл данных не найден. Пожалуйста, загрузите CSV файл.")
+    pass
 
-except Exception as e:
-    # Если мультипликативная модель не сработала — используем лог-преобразование + аддитивную модель
-    print("Мультипликативная модель не применима (ошибка), перейду к лог-преобразованию. Ошибка:", e)
-    use_log = True
+df['ISSUE_DATE'] = pd.to_datetime(df['ISSUE_DATE'])
+df['FLIGHT_DATE_LOC'] = pd.to_datetime(df['FLIGHT_DATE_LOC'])
 
-if use_log:
-    # лог-преобразование (stabilize variance)
-    ts_log = np.log1p(ts + shift)   # log1p для малых значений
-    model_hw_log = ExponentialSmoothing(
-        ts_log,
-        trend="add",
-        seasonal="add",
-        seasonal_periods=7,
-    ).fit()
+df['REVENUE_AMOUNT'] = pd.to_numeric(df['REVENUE_AMOUNT'], errors='coerce')
+df = df.dropna(subset=['REVENUE_AMOUNT'])
 
-    forecast_log = model_hw_log.forecast(steps=forecast_steps)
-    # обратное преобразование
-    forecast_hw = np.expm1(forecast_log) - shift
-    # интервал на лог-уровне
-    resid = model_hw_log.resid
-    resid_std = np.nanstd(resid)
-    lower_log = forecast_log - 1.96 * resid_std
-    upper_log = forecast_log + 1.96 * resid_std
-    lower = np.expm1(lower_log) - shift
-    upper = np.expm1(upper_log) - shift
+df['issue_month'] = df['ISSUE_DATE'].dt.month_name()
+df['issue_dow'] = df['ISSUE_DATE'].dt.day_name()
+df['flight_month'] = df['FLIGHT_DATE_LOC'].dt.month_name()
 
-else:
-    # Прямая мультипликативная модель
-    forecast_hw = model_hw.forecast(forecast_steps)
-    resid = model_hw.resid
-    resid_std = np.nanstd(resid)
-    lower = forecast_hw - 1.96 * resid_std
-    upper = forecast_hw + 1.96 * resid_std
+print("Данные успешно загружены и обработаны.")
+print(f"Всего записей: {df.shape[0]}")
+print("-" * 30)
 
-# Гарантируем, что прогнозы не отрицательны
-forecast_hw = np.maximum(forecast_hw, 0)
-lower = np.maximum(lower, 0)
-upper = np.maximum(upper, 0)
+print("\n--- Общие статистики ---")
+print(df[['REVENUE_AMOUNT']].describe())
 
-# ---------------------- Красивый график прогноза ----------------------
-plt.figure(figsize=(14, 6))
-plt.plot(ts.index, ts.values, label="Фактические продажи", linewidth=2)
-plt.plot(forecast_hw.index, forecast_hw.values, "--", label="Прогноз (Holt-Winters)", linewidth=2)
+plt.figure(figsize=(10, 6))
+sns.histplot(df['REVENUE_AMOUNT'], bins=50, kde=True, color='skyblue')
+plt.title('Распределение сумм продаж (Revenue Amount)')
+plt.xlabel('Сумма')
+plt.ylabel('Частота')
+plt.show()
 
-plt.fill_between(
-    forecast_hw.index,
-    lower,
-    upper,
-    alpha=0.3,
-    label="Доверительный интервал (примерно ±1.96σ)"
-)
+top_orig = df['ORIG_CITY_CODE'].value_counts().head(10)
+top_dest = df['DEST_CITY_CODE'].value_counts().head(10)
 
-plt.title("Holt-Winters — прогноз продаж на 90 дней (устойчивый, без отрицаний)")
-plt.xlabel("Дата")
-plt.ylabel("Сумма продаж")
+fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+
+sns.barplot(x=top_orig.values, y=top_orig.index, ax=axes[0], palette='viridis')
+axes[0].set_title('Топ-10 городов вылета')
+
+sns.barplot(x=top_dest.values, y=top_dest.index, ax=axes[1], palette='magma')
+axes[1].set_title('Топ-10 городов назначения')
+plt.tight_layout()
+plt.show()
+
+daily_flights = df.groupby('FLIGHT_DATE_LOC').agg({
+    'REVENUE_AMOUNT': 'sum',
+    'ISSUE_DATE': 'count'
+}).rename(columns={'ISSUE_DATE': 'FLIGHT_COUNT'})
+
+daily_flights['Revenue_MA7'] = daily_flights['REVENUE_AMOUNT'].rolling(window=7).mean()
+
+plt.figure(figsize=(14, 7))
+plt.plot(daily_flights.index, daily_flights['REVENUE_AMOUNT'], label='Выручка (факт)', alpha=0.3)
+plt.plot(daily_flights.index, daily_flights['Revenue_MA7'], label='Тренд (7 дней)', color='red', linewidth=2)
+plt.title('Сезонность выручки по датам вылета')
+plt.legend()
+plt.show()
+
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+pax_counts = df['PAX_TYPE'].value_counts()
+axes[0].pie(pax_counts, labels=pax_counts.index, autopct='%1.1f%%', startangle=140, colors=sns.color_palette('pastel'))
+axes[0].set_title('Распределение по типам пассажиров (AD/CHD/...)')
+
+df['FFP_FLAG'] = df['FFP_FLAG'].fillna('No FFP')
+sns.boxplot(x='FFP_FLAG', y='REVENUE_AMOUNT', data=df, ax=axes[1], showfliers=False) # showfliers=False скрывает выбросы
+axes[1].set_title('Средний чек: Программа лояльности vs Обычные')
+plt.show()
+
+top_fop = df['FOP_TYPE_CODE'].value_counts().head(5).index
+df_top_fop = df[df['FOP_TYPE_CODE'].isin(top_fop)]
+
+plt.figure(figsize=(12, 6))
+sns.countplot(x='FOP_TYPE_CODE', data=df_top_fop, order=top_fop, palette='Set2')
+plt.title('Популярность способов оплаты (Топ-5)')
+plt.show()
+
+print("\n--- Подготовка к прогнозированию ---")
+
+sales_ts = df.groupby('ISSUE_DATE')['REVENUE_AMOUNT'].sum().reset_index()
+sales_ts = sales_ts.sort_values('ISSUE_DATE')
+
+sales_ts['day_of_week'] = sales_ts['ISSUE_DATE'].dt.dayofweek
+sales_ts['day_of_month'] = sales_ts['ISSUE_DATE'].dt.day
+sales_ts['month'] = sales_ts['ISSUE_DATE'].dt.month
+sales_ts['is_weekend'] = sales_ts['day_of_week'].apply(lambda x: 1 if x >= 5 else 0)
+
+sales_ts['lag_1'] = sales_ts['REVENUE_AMOUNT'].shift(1)
+sales_ts['lag_7'] = sales_ts['REVENUE_AMOUNT'].shift(7)
+sales_ts['rolling_mean_7'] = sales_ts['REVENUE_AMOUNT'].shift(1).rolling(window=7).mean()
+
+sales_ts = sales_ts.dropna()
+
+test_days = 14
+train_data = sales_ts.iloc[:-test_days]
+test_data = sales_ts.iloc[-test_days:]
+
+features = ['day_of_week', 'day_of_month', 'month', 'is_weekend', 'lag_1', 'lag_7', 'rolling_mean_7']
+target = 'REVENUE_AMOUNT'
+
+X_train = train_data[features]
+y_train = train_data[target]
+X_test = test_data[features]
+y_test = test_data[target]
+
+model = RandomForestRegressor(n_estimators=100, random_state=42)
+model.fit(X_train, y_train)
+
+predictions = model.predict(X_test)
+
+mae = mean_absolute_error(y_test, predictions)
+print(f"MAE (Средняя абсолютная ошибка): {mae:.2f}")
+
+plt.figure(figsize=(12, 6))
+plt.plot(train_data['ISSUE_DATE'].iloc[-30:], train_data['REVENUE_AMOUNT'].iloc[-30:], label='История (Train)', alpha=0.5)
+plt.plot(test_data['ISSUE_DATE'], y_test, label='Факт (Test)', marker='o')
+plt.plot(test_data['ISSUE_DATE'], predictions, label='Прогноз (Prediction)', linestyle='--', marker='x', color='red')
+
+plt.title(f'Прогноз объема продаж на 2 недели (Random Forest)\nMAE: {mae:.0f}')
+plt.xticks(rotation=45)
 plt.legend()
 plt.tight_layout()
 plt.show()
 
-# Дополнительно выведем пару чисел для проверки
-print(f"Прогноз (первые 5 значений):\n{forecast_hw.head()}")
-print(f"Min прогноза = {forecast_hw.min():.2f}, max прогноза = {forecast_hw.max():.2f}")
-
-print("\nАнализ успешно завершён.")
+importances = pd.Series(model.feature_importances_, index=features).sort_values(ascending=False)
+print("\nВажность факторов при прогнозе:")
+print(importances)
