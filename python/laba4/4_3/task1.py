@@ -1,11 +1,11 @@
 import random
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from faker import Faker
 
+# исходные настройки
 RND_SEED = 42
 random.seed(RND_SEED)
 np.random.seed(RND_SEED)
@@ -83,24 +83,21 @@ def gen_full_names_faker(n, genders_array):
         else:
             first = fake.first_name_female()
             last = fake.last_name_female()
-        # отец — всегда мужское имя
         father = fake.first_name_male()
         patron = make_patronymic_from_father(father, g)
         fio.append(f"{last} {first} {patron}")
     return fio
 
+# генерация данных
 years_list = gen_years_list(years, n_per_year)
 N = len(years_list)
 
 genders = np.array([fake.random_element(elements=("m", "f")) for _ in range(N)])
-
 forms_arr = [fake.random_element(elements=forms) for _ in range(N)]
 specialties_arr = [fake.random_element(elements=specialties) for _ in range(N)]
-
 fio_arr = gen_full_names_faker(N, genders)
 phones = gen_phone_with_faker(N)
 addresses = gen_address_with_faker(N)
-
 taken_subjects = [fake.random_elements(elements=subjects, length=3, unique=True) for _ in range(N)]
 
 df = pd.DataFrame({
@@ -166,9 +163,9 @@ pivot_cutoff = cutoffs.pivot(index="Год", columns="Специальность
 
 out_dir = Path.cwd() / "output_data"
 out_dir.mkdir(exist_ok=True, parents=True)
-csv_path = out_dir / "admissions_synthetic_all_faker.csv"
+csv_path = out_dir / "admissions_synthetic.csv"
 df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-pivot_path = out_dir / "cutoffs_pivot_all_faker.csv"
+pivot_path = out_dir / "cutoffs_pivot.csv"
 pivot_cutoff.to_csv(pivot_path, encoding="utf-8-sig")
 
 print(f"CSV сохранён: {csv_path}")
@@ -196,40 +193,56 @@ plt.grid(True)
 plt.tight_layout()
 plt.show()
 
-for spec in specialties:
-    if spec in pivot_cutoff.columns:
-        ser = pivot_cutoff[spec]
-        if ser.notna().any():
-            plt.figure(figsize=(8, 4))
-            plt.plot(ser.index, ser.values, marker='o')
-            plt.title(f"Динамика проходного балла: {spec}")
-            plt.xlabel("Год")
-            plt.ylabel("Проходной балл (минимум среди поступивших)")
-            plt.ylim(40, 100)
-            plt.grid(True)
-            plt.tight_layout()
-            plt.show()
+agg_admitted = (
+    df[df["Поступил"]]
+    .groupby("Специальность")["Поступил"]
+    .count()
+    .sort_values()
+)
 
-agg_admitted = df[df["Поступил"]].groupby("Специальность")["Поступил"].count().sort_values(ascending=False)
 plt.figure(figsize=(10, 6))
-agg_admitted.plot(kind="bar")
-plt.title("Количество поступивших студентов по специальностям (всего за 2021-2025)")
-plt.xlabel("Специальность")
-plt.ylabel("Количество поступивших")
-plt.xticks(rotation=45, ha='right')
+agg_admitted.plot(kind="barh")
+plt.title("Количество поступивших студентов по специальностям (2021–2025)")
+plt.xlabel("Количество поступивших")
+plt.ylabel("Специальность")
 plt.tight_layout()
 plt.show()
 
 forms_stats = df[df["Поступил"]].groupby("Форма обучения")["Поступил"].count()
-plt.figure(figsize=(6, 5))
-forms_stats.plot(kind="bar")
+
+plt.figure(figsize=(6, 6))
+forms_stats.plot(
+    kind="pie",
+    autopct="%1.1f%%",
+    startangle=90,
+    ylabel=""
+)
 plt.title("Распределение поступивших по формам обучения")
-plt.xlabel("Форма обучения")
-plt.ylabel("Количество поступивших")
 plt.tight_layout()
 plt.show()
+
 
 print("\nПример строк данных:")
 print(df.head(10).to_string(index=False))
 print("\nПивот-таблица проходных баллов (минимум среди поступивших):")
 print(pivot_cutoff.round(1))
+
+plt.figure(figsize=(14, 8))
+for spec in pivot_cutoff.columns:
+    ser = pivot_cutoff[spec]
+    if ser.isna().all():
+        continue
+    plt.plot(pivot_cutoff.index, ser.values, marker='o', label=spec)
+
+plt.title("Динамика проходного балла по всем специальностям (в одном графике)")
+plt.xlabel("Год")
+plt.ylabel("Проходной балл (минимум среди поступивших)")
+plt.ylim(40, 100)
+plt.grid(True, linestyle=':', linewidth=0.6)
+plt.xticks(pivot_cutoff.index)
+plt.legend(bbox_to_anchor=(1.02, 1), loc='upper left')
+plt.tight_layout()
+
+
+plt.show()
+
