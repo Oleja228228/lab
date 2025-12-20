@@ -1,124 +1,227 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.linear_model import LinearRegression
+import seaborn as sns
+from sklearn.ensemble import RandomForestRegressor
+import warnings
 
-file_path = "lab_4_part_5.xlsx"
-xls = pd.ExcelFile(file_path)
-sheet = xls.sheet_names[0]
+warnings.filterwarnings('ignore')
+sns.set_theme(style="whitegrid")
 
-raw = pd.read_excel(xls, sheet_name=sheet, header=None)
-header_row = None
-for i in range(10):
-    vals = raw.iloc[i].astype(str).str.lower().tolist()
-    if any("товар" in v for v in vals) and any("продаж" in v or "колич" in v for v in vals):
-        header_row = i
-        break
-if header_row is None:
-    header_row = 0
+df = pd.read_excel('lab_4_part_5.xlsx', skiprows=1)
+df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
 
-df = pd.read_excel(xls, sheet_name=sheet, header=header_row)
+df['Дата'] = pd.to_datetime(df['Дата'])
+df = df.sort_values('Дата').reset_index(drop=True)
 
-df.columns = [str(c).strip() for c in df.columns]
-df['Дата'] = pd.to_datetime(df['Дата'], errors='coerce')
-df = df.dropna(subset=['Дата']).copy()
-df['month'] = df['Дата'].dt.to_period('M').dt.to_timestamp()
+df['Прибыль'] = df['Продажи'] - df['Себестоимость']
+df['Средняя_цена'] = df['Продажи'] / df['Количество']
+df['Месяц_номер'] = df['Дата'].dt.month
+df['Год-мес'] = df['Дата'].dt.to_period('M').astype(str)
 
-df['quantity'] = pd.to_numeric(df['Количество'], errors='coerce')
-df['sales'] = pd.to_numeric(df['Продажи'], errors='coerce')
-df['cost'] = pd.to_numeric(df['Себестоимость'], errors='coerce')
-df['price'] = df['sales'] / df['quantity'].replace({0: np.nan})
+print("Данные успешно загружены")
 
-monthly = (df.groupby('month')
-             .agg(total_quantity=('quantity', 'sum'),
-                  total_sales=('sales', 'sum'),
-                  total_cost=('cost', 'sum'))
-             .reset_index())
-monthly['avg_price'] = monthly['total_sales'] / monthly['total_quantity'].replace({0: np.nan})
-monthly['sales_mom_change'] = monthly['total_sales'].pct_change()
+monthly_total = df.groupby('Год-мес', sort=False)['Продажи'].sum().reset_index()
+monthly_total['Рост_спад_%'] = monthly_total['Продажи'].pct_change() * 100
 
-prod_all = (df.groupby('товар')
-              .agg(total_qty=('quantity', 'sum'),
-                   total_sales=('sales', 'sum'),
-                   avg_price=('price', 'mean'))
-              .reset_index()
-              .sort_values('total_sales', ascending=False))
+plt.figure(figsize=(10, 5))
+sns.barplot(
+    data=monthly_total,
+    x='Год-мес',
+    y='Продажи',
+    hue='Год-мес',
+    palette='viridis',
+    legend=False
+)
+plt.title('Динамика общего товарооборота')
+plt.xticks(rotation=45)
+plt.show()
 
-prod_month = (df.groupby(['month', 'товар'])
-                .agg(qty=('quantity', 'sum'), sales=('sales', 'sum'))
-                .reset_index())
+plt.figure(figsize=(10, 4))
+plt.plot(
+    monthly_total['Год-мес'],
+    monthly_total['Рост_спад_%'],
+    marker='o',
+    linewidth=2
+)
+plt.axhline(0, linestyle='--')
+plt.title('Ежемесячный темп роста / спада выручки (%)')
+plt.xticks(rotation=45)
+plt.show()
 
-store_all = (df.groupby('точка')
-               .agg(total_qty=('quantity', 'sum'),
-                    total_sales=('sales', 'sum'))
-               .reset_index()
-               .sort_values('total_sales', ascending=False))
+plt.figure(figsize=(10, 6))
+point_sales = (
+    df.groupby(['Год-мес', 'точка'], sort=False)['Продажи']
+    .sum()
+    .reset_index()
+)
 
-store_month = (df.groupby(['month', 'точка'])
-                 .agg(qty=('quantity', 'sum'), sales=('sales', 'sum'))
-                 .reset_index())
+sns.lineplot(
+    data=point_sales,
+    x='Год-мес',
+    y='Продажи',
+    hue='точка',
+    marker='o'
+)
+plt.title('Динамика продаж по точкам реализации')
+plt.xticks(rotation=45)
+plt.show()
 
-horizon = 3
-forecast_rows = []
+brand_stats = (
+    df.groupby('бренд')
+    .agg({'Продажи': 'sum', 'Себестоимость': 'sum'})
+    .reset_index()
+)
 
-for prod in prod_all['товар']:
-    ts = prod_month[prod_month['товар'] == prod].sort_values('month')
-    ts = ts.set_index('month').resample('M').sum().fillna(0).reset_index()
-    ts['t'] = np.arange(len(ts))
-    X = ts[['t']].values
-    y = ts['sales'].values
+brand_stats['Прибыль'] = brand_stats['Продажи'] - brand_stats['Себестоимость']
+brand_stats['Маржа_%'] = (brand_stats['Прибыль'] / brand_stats['Продажи'] * 100).round(2)
 
-    if len(ts) < 2 or np.allclose(y, 0):
-        preds = [0] * horizon
-    else:
-        model = LinearRegression()
-        model.fit(X, y)
-        t_future = np.arange(len(ts), len(ts) + horizon).reshape(-1, 1)
-        preds = np.maximum(model.predict(t_future), 0).tolist()
+brand_stats_melted = brand_stats.melt(
+    id_vars='бренд',
+    value_vars=['Продажи', 'Себестоимость']
+)
 
-    forecast_rows.append({
-        'товар': prod,
-        'пред_мес_1': preds[0],
-        'пред_мес_2': preds[1],
-        'пред_мес_3': preds[2],
-        'сумма_3мес': sum(preds)
+plt.figure(figsize=(10, 6))
+sns.barplot(
+    data=brand_stats_melted,
+    x='бренд',
+    y='value',
+    hue='variable',
+    palette='muted'
+)
+plt.title('Объем продаж и себестоимость по брендам')
+plt.show()
+
+features = ['Месяц_номер', 'lag_1', 'lag_2']
+forecast_months = 3
+all_forecasts = {}
+
+plt.figure(figsize=(12, 7))
+
+for brand in df['бренд'].unique():
+
+    brand_df = df[df['бренд'] == brand].set_index('Дата')
+
+    monthly = (
+        brand_df['Продажи']
+        .resample('M')
+        .sum()
+        .to_frame()
+    )
+
+    monthly['Месяц_номер'] = monthly.index.month
+    monthly['lag_1'] = monthly['Продажи'].shift(1)
+    monthly['lag_2'] = monthly['Продажи'].shift(2)
+
+    train = monthly.dropna()
+
+    if len(train) < 6:
+        continue
+
+    model = RandomForestRegressor(
+        n_estimators=200,
+        random_state=42
+    )
+    model.fit(train[features], train['Продажи'])
+
+    history = list(monthly['Продажи'].dropna().values)
+    last_date = monthly.index[-1]
+
+    forecast_dates = []
+    preds = []
+
+    for i in range(1, forecast_months + 1):
+        next_date = last_date + pd.DateOffset(months=i)
+        month_num = next_date.month
+
+        X_pred = pd.DataFrame([[
+            month_num,
+            history[-1],
+            history[-2]
+        ]], columns=features)
+
+        pred = model.predict(X_pred)[0]
+        preds.append(pred)
+        forecast_dates.append(next_date)
+        history.append(pred)
+
+    all_forecasts[brand] = preds
+
+    plt.plot(
+        monthly.index,
+        monthly['Продажи'],
+        marker='o',
+        label=f'{brand} (Факт)'
+    )
+
+    plt.plot(
+        [monthly.index[-1]] + forecast_dates,
+        [monthly['Продажи'].iloc[-1]] + preds,
+        '--',
+        marker='s',
+        label=f'{brand} (Прогноз RF)'
+    )
+
+plt.title('Прогноз продаж по брендам (Random Forest)')
+plt.xlabel('Дата')
+plt.ylabel('Выручка')
+plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+plt.grid(alpha=0.3)
+plt.tight_layout()
+plt.show()
+
+print("\n" + "=" * 80)
+print("ИТОГОВЫЙ АНАЛИТИЧЕСКИЙ ОТЧЕТ ПО ПРОДАЖАМ")
+print("=" * 80)
+
+total_sales = df['Продажи'].sum()
+avg_monthly_growth = monthly_total['Рост_спад_%'].mean()
+
+print("\n1. ОБЩАЯ ДИНАМИКА ПРОДАЖ")
+print(f"За анализируемый период общий объем продаж составил {total_sales:,.2f} ₽.")
+print(f"Средний ежемесячный темп изменения выручки: {avg_monthly_growth:.2f} %.")
+print(
+    "Наличие как положительных, так и отрицательных значений темпа роста "
+    "свидетельствует о сезонных колебаниях спроса."
+)
+
+point_report = (
+    df.groupby('точка')
+    .agg({
+        'Продажи': 'mean',
+        'Количество': 'sum',
+        'Прибыль': 'sum'
     })
+    .rename(columns={'Продажи': 'Средний_чек_₽'})
+    .round(2)
+)
 
-forecasts = pd.DataFrame(forecast_rows)
+best_point = point_report['Прибыль'].idxmax()
+worst_point = point_report['Прибыль'].idxmin()
 
-plt.figure(figsize=(8,4))
-plt.plot(monthly['month'], monthly['total_sales'], marker='o')
-plt.title('Общий товарооборот по месяцам')
-plt.xlabel('Месяц')
-plt.ylabel('Выручка')
-plt.grid(True)
-plt.show()
+print("\n2. АНАЛИЗ ТОЧЕК ПРОДАЖ")
+print(point_report)
+print(
+    f"Наиболее эффективной точкой продаж является «{best_point}», "
+    f"обеспечивающая наибольшую совокупную прибыль."
+)
+print(
+    f"Наименее эффективной точкой является «{worst_point}», "
+    "что может свидетельствовать о низком трафике или неэффективном ассортименте."
+)
 
-top6 = prod_all.head(6)['товар']
-plt.figure(figsize=(10,6))
-for p in top6:
-    s = prod_month[prod_month['товар']==p].set_index('month').resample('M').sum().fillna(0)['sales']
-    plt.plot(s.index, s.values, marker='o', label=p)
-plt.title('Динамика продаж по топ-6 товарам')
-plt.xlabel('Месяц')
-plt.ylabel('Выручка')
-plt.legend()
-plt.grid(True)
-plt.show()
+best_brand = brand_stats.loc[brand_stats['Маржа_%'].idxmax()]
 
-top6s = store_all.head(6)['точка']
-plt.figure(figsize=(10,6))
-for sname in top6s:
-    s = store_month[store_month['точка']==sname].set_index('month').resample('M').sum().fillna(0)['sales']
-    plt.plot(s.index, s.values, marker='o', label=sname)
-plt.title('Динамика продаж по топ-6 точкам')
-plt.xlabel('Месяц')
-plt.ylabel('Выручка')
-plt.legend()
-plt.grid(True)
-plt.show()
+print("\n3. АНАЛИЗ БРЕНДОВ")
+print(brand_stats[['бренд', 'Продажи', 'Себестоимость', 'Прибыль', 'Маржа_%']])
+print(
+    f"Бренд «{best_brand['бренд']}» демонстрирует наибольшую маржинальность "
+    f"({best_brand['Маржа_%']} %), что делает его приоритетным для продвижения."
+)
 
-print("\nЕжемесячные итоги:\n", monthly.head())
-print("\nСводка по товарам:\n", prod_all.head())
-print("\nСводка по точкам:\n", store_all.head())
-print("\nПрогноз продаж (3 месяца):\n", forecasts.head())
+print("\n4. ПРОГНОЗ ПРОДАЖ")
+for brand, values in all_forecasts.items():
+    print(f"\nБренд: {brand}")
+    for i, v in enumerate(values, 1):
+        print(f"  Месяц +{i}: ожидаемая выручка {v:,.2f} ₽")
+
