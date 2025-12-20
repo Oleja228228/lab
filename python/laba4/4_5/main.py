@@ -14,7 +14,6 @@ df = df.loc[:, ~df.columns.str.contains('^Unnamed')]
 df['Дата'] = pd.to_datetime(df['Дата'])
 df = df.sort_values('Дата').reset_index(drop=True)
 
-# расчетные колонки
 df['Прибыль'] = df['Продажи'] - df['Себестоимость']
 df['Средняя_цена'] = df['Продажи'] / df['Количество']
 df['Месяц_номер'] = df['Дата'].dt.month
